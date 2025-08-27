@@ -34,7 +34,6 @@ func main() {
 	excfile := flag.String("noproxy", "noproxy.conf", "request path exceptions list")
 	stopfile := flag.String("stoplist", "stoplist.conf", "requests stop list")
 	proxmod := flag.String("mode", "riak", "proxy mode: [http | riak]")
-	logformat := flag.String("logformat", "console", "change logformat to json")
 	flag.Parse()
 
 	if len(os.Args) > 1 && os.Args[1] == "version" {
@@ -63,7 +62,7 @@ func main() {
 			Initial:    100,
 			Thereafter: 100,
 		},
-		Encoding:         *logformat,
+		Encoding:         "json",
 		EncoderConfig:    encoderCfg,
 		OutputPaths:      []string{"stdout"},
 		ErrorOutputPaths: []string{"stdout"},
@@ -292,7 +291,7 @@ func writeErrorResponse(msg string, r *http.Request, w http.ResponseWriter, err 
 	zap.L().Error(msg,
 		zap.String("url", r.URL.String()),
 		zap.String("error", err.Error()),
-		zap.Float64("responseTime", responseTime.Seconds()),
+		zap.Int64("responseTime", responseTime.Milliseconds()),
 	)
 	w.WriteHeader(http.StatusInternalServerError)
 	fmt.Fprintln(w, msg)
@@ -305,13 +304,13 @@ func writeResponse(w http.ResponseWriter, resp *http.Response, respBody []byte, 
 				zap.String("status", resp.Status),
 				zap.String("url", resp.Request.URL.String()),
 				zap.String("body", string(respBody)),
-				zap.Float64("responseTime", responseTime.Seconds()),
+				zap.Int64("responseTime", responseTime.Milliseconds()),
 			)
 		} else {
 			zap.L().Info("cli response",
 				zap.String("status", resp.Status),
 				zap.String("url", resp.Request.URL.String()),
-				zap.Float64("responseTime", responseTime.Seconds()),
+				zap.Int64("responseTime", responseTime.Milliseconds()),
 			)
 		}
 	}()
