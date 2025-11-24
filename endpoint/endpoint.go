@@ -34,19 +34,6 @@ type Instance struct {
 	client        *http.Client
 }
 
-// newTransport creates a new http.Transport with common settings.
-func newTransport() *http.Transport {
-	return &http.Transport{
-		DialContext: (&net.Dialer{
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
-		DisableKeepAlives:  false,
-		MaxIdleConns:       100,
-		MaxIdleConnsPerHost:  100,
-		DisableCompression: true, // without this decompress plain data by default.
-	}
-}
-
 // New make new enfpoint
 func New(host, port, protocol, auth string, urlEncoder URLModifier, headerEncoder, headerDecoder HeaderModifier) *Instance {
 	if protocol != "http" && protocol != "https" {
@@ -63,34 +50,44 @@ func New(host, port, protocol, auth string, urlEncoder URLModifier, headerEncode
 		headerEncoder: headerEncoder,
 		headerDecoder: headerDecoder,
 		client: &http.Client{
-			Timeout:   time.Second * 4,
-			Transport: newTransport(),
+			Timeout: time.Second * 4,
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				DisableKeepAlives:  false,
+				MaxIdleConns:       100,
+				MaxIdleConnsPerHost:  100,
+				DisableCompression: true, // without this decompress plain data by default.
+			},
 		},
 	}
 }
 
 // NewTLS make new tls Instance
 func NewTLS(protocol, host, port, auth, keyfile, crtfile string) *Instance {
-	transport := newTransport()
+	cert, err := tls.LoadX509KeyPair(crtfile, keyfile)
+	if err != nil {
+		zap.L().Error("no certificates loaded",
+			zap.String("error", err.Error()),
+		)
+	}
 	config := &tls.Config{
+		Certificates:       []tls.Certificate{cert},
 		InsecureSkipVerify: true,
 	}
-
-	if keyfile != "" && crtfile != "" {
-		cert, err := tls.LoadX509KeyPair(crtfile, keyfile)
-		if err != nil {
-			zap.L().Error("no certificates loaded",
-				zap.String("error", err.Error()),
-			)
-		} else {
-			config.Certificates = []tls.Certificate{cert}
-		}
+	Instance := New(host, port, protocol, auth, nil, nil, nil)
+	Instance.client.Transport = &http.Transport{
+		TLSClientConfig:    config,
+		DisableCompression: true,
+		DisableKeepAlives:  false,
+		MaxIdleConns:       100,
+		MaxIdleConnsPerHost:  100,
+		DialContext: (&net.Dialer{
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
 	}
-
-	transport.TLSClientConfig = config
-	instance := New(host, port, protocol, auth, nil, nil, nil)
-	instance.client.Transport = transport
-	return instance
+	return Instance
 }
 
 // MakeReadOnly make Instance readonly
