@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -51,6 +52,12 @@ func New(host, port, protocol, auth string, urlEncoder URLModifier, headerEncode
 		client: &http.Client{
 			Timeout: time.Second * 4,
 			Transport: &http.Transport{
+				DialContext: (&net.Dialer{
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				DisableKeepAlives:  false,
+				MaxIdleConns:       100,
+				MaxIdleConnsPerHost:  100,
 				DisableCompression: true, // without this decompress plain data by default.
 			},
 		},
@@ -73,6 +80,12 @@ func NewTLS(protocol, host, port, auth, keyfile, crtfile string) *Instance {
 	Instance.client.Transport = &http.Transport{
 		TLSClientConfig:    config,
 		DisableCompression: true,
+		DisableKeepAlives:  false,
+		MaxIdleConns:       100,
+		MaxIdleConnsPerHost:  100,
+		DialContext: (&net.Dialer{
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
 	}
 	return Instance
 }
