@@ -178,6 +178,31 @@ func (inst *Instance) Post(path string, headers http.Header, body []byte) (resp 
 
 // Do something
 func (inst *Instance) Do(originalRq *http.Request) (resp *http.Response, body []byte, err error) {
+	requestTime := time.Now()
+	var upstreamResponseTime time.Duration
+
+	defer func() {
+		ip, _, _ := net.SplitHostPort(originalRq.RemoteAddr)
+		fields := []zap.Field{
+			zap.String("clientip", ip),
+			zap.String("forwarded_for", originalRq.Header.Get("X-Forwarded-For")),
+			zap.String("request_method", originalRq.Method),
+			zap.String("request_uri", originalRq.URL.RequestURI()),
+			zap.Int64("request_size", originalRq.ContentLength),
+			zap.Float64("request_time", time.Since(requestTime).Seconds()),
+			zap.String("user_agent", originalRq.Header.Get("User-Agent")),
+			zap.Float64("upstream_response_time", upstreamResponseTime.Seconds()),
+			zap.String("upstream_addr", inst.host+":"+inst.port),
+		}
+		if resp != nil {
+			fields = append(fields, zap.Int("response", resp.StatusCode))
+			fields = append(fields, zap.Int64("response_size", resp.ContentLength))
+		} else {
+			fields = append(fields, zap.Int("response", http.StatusInternalServerError))
+		}
+		zap.L().Info("access", fields...)
+	}()
+
 	if inst.readonly {
 		if strings.ToUpper(originalRq.Method) == "POST" || strings.ToUpper(originalRq.Method) == "PUT" ||
 			strings.ToUpper(originalRq.Method) == "PATCH" || strings.ToUpper(originalRq.Method) == "DELETE" {
@@ -205,7 +230,9 @@ func (inst *Instance) Do(originalRq *http.Request) (resp *http.Response, body []
 	}
 
 	// make a request!
+	startTime := time.Now()
 	resp, err = inst.client.Do(rq)
+	upstreamResponseTime += time.Since(startTime)
 
 	counter := 10
 	for err != nil {
@@ -221,7 +248,9 @@ func (inst *Instance) Do(originalRq *http.Request) (resp *http.Response, body []
 			rq.Body = ioutil.NopCloser(bytes.NewBuffer(rqBodyData))
 		}
 		// make a request again!
+		startTime = time.Now()
 		resp, err = inst.client.Do(rq)
+		upstreamResponseTime += time.Since(startTime)
 		counter--
 
 		if err != nil && counter == 0 {
