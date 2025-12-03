@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"io/ioutil"
 	"log"
 	"net"
@@ -14,6 +15,40 @@ import (
 	"sync"
 	"time"
 )
+
+var accessLogger *zap.Logger
+
+func init() {
+	encoderCfg := zapcore.EncoderConfig{
+		TimeKey:        "@timestamp",
+		LevelKey:       "level",
+		NameKey:        "logger",
+		CallerKey:      "caller",
+		MessageKey:     "message",
+		StacktraceKey:  "stacktrace",
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeLevel:    zapcore.LowercaseLevelEncoder,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
+	}
+
+	logConfig := zap.Config{
+		Level:            zap.NewAtomicLevelAt(zap.InfoLevel),
+		Development:      false,
+		Sampling:         nil, // Disable sampling for access logs
+		Encoding:         "json",
+		EncoderConfig:    encoderCfg,
+		OutputPaths:      []string{"stdout"},
+		ErrorOutputPaths: []string{"stdout"},
+	}
+
+	var err error
+	accessLogger, err = logConfig.Build()
+	if err != nil {
+		log.Fatalf("cannot initialize access logger: %v", err)
+	}
+}
 
 // URLModifier modify given URL to separate requests into several virtual spaces
 type URLModifier func(text string) string
@@ -200,7 +235,7 @@ func (inst *Instance) Do(originalRq *http.Request) (resp *http.Response, body []
 		} else {
 			fields = append(fields, zap.Int("response", http.StatusInternalServerError))
 		}
-		zap.L().Info("access", fields...)
+		accessLogger.Info("access", fields...)
 	}()
 
 	if inst.readonly {
