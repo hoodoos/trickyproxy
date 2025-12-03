@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/kzub/trickyproxy/endpoint"
+	"github.com/kzub/trickyproxy/logger"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"io/ioutil"
@@ -35,6 +36,7 @@ func main() {
 	stopfile := flag.String("stoplist", "stoplist.conf", "requests stop list")
 	proxmod := flag.String("mode", "riak", "proxy mode: [http | riak]")
 	logformat := flag.String("logformat", "json", "change logformat to console")
+	enableAccessLog := flag.Bool("enable-access-log", true, "enable access log")
 	flag.Parse()
 
 	if len(os.Args) > 1 && os.Args[1] == "version" {
@@ -70,10 +72,16 @@ func main() {
 	}
 
 	// logger, _ := zap.NewProduction()
-	logger, _ := logConfig.Build()
-	defer logger.Sync()
+	zapLogger, _ := logConfig.Build()
+	defer zapLogger.Sync()
 
-	undo := zap.ReplaceGlobals(logger)
+	if *enableAccessLog {
+		zapLogger.Info("access log enabled")
+		accessLogger, _ := zap.NewProduction()
+		logger.InitAccessLog(accessLogger)
+	}
+
+	undo := zap.ReplaceGlobals(zapLogger)
 	defer undo()
 
 	if *proxmod == "riak" {
