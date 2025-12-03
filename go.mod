@@ -1,8 +1,11 @@
-module github.com/kzub/trickyproxy
+module main
 
 go 1.18
 
-require go.uber.org/zap v1.24.0
+require (
+	github.com/kzub/trickyproxy v0.0.0-20190514152946-3104bbb9f17e
+	go.uber.org/zap v1.24.0
+)
 
 require (
 	go.uber.org/atomic v1.7.0 // indirect
